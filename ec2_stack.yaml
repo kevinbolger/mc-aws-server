@@ -1,0 +1,215 @@
+Parameters:
+  EBSVolumeId:
+    Description: The ID of the EBS volume to attach.
+    Type: String
+  EC2KeyName:
+    Description: The name of the EC2 key pair
+    Type: String
+  WhitelistIP:
+    Description: The IP address to whitelist for SSH access.
+    Type: String
+    Default: 0.0.0.0/0
+  AvailabilityZone:
+    Description: The AvailabilityZone to deploy to.
+    Type: String
+    Default: us-west-2a
+  MinecraftSeed:
+    Description: The seed for the Minecraft world
+    Type: String
+    Default: "random"
+  InstanceSize:
+    Description: The size of the EC2 instance
+    Type: String
+    Default: t3.medium
+
+Conditions:
+  IsDefaultIP: !Equals [!Ref WhitelistIP, "0.0.0.0/0"]
+
+Resources:
+
+  # VPC Resource
+  MinecraftVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: "10.0.0.0/16"
+      EnableDnsSupport: "true"
+      EnableDnsHostnames: "true"
+      Tags:
+        - Key: "Name"
+          Value: "MinecraftVPC"
+
+  # Subnet Resource
+  MinecraftSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref MinecraftVPC
+      CidrBlock: "10.0.1.0/24"
+      AvailabilityZone: !Ref AvailabilityZone
+      MapPublicIpOnLaunch: "true"
+      Tags:
+        - Key: "Name"
+          Value: "MinecraftSubnet"
+
+  # Internet Gateway for VPC
+  MinecraftInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: "MinecraftInternetGateway"
+  
+  # Attach Internet Gateway to VPC
+  GatewayToVPCAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref MinecraftVPC
+      InternetGatewayId: !Ref MinecraftInternetGateway
+
+  # Route Table for VPC
+  MinecraftRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref MinecraftVPC
+
+  # Route to Internet via IGW
+  MinecraftRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayToVPCAttachment
+    Properties:
+      RouteTableId: !Ref MinecraftRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref MinecraftInternetGateway
+
+  # Associate Subnet with Route Table
+  SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref MinecraftSubnet
+      RouteTableId: !Ref MinecraftRouteTable
+
+  # EC2 Instance
+  MinecraftEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties: 
+      InstanceType: !Ref InstanceSize
+      ImageId: ami-00970f57473724c10
+      KeyName: MyMinecraftKeyPair
+      Tags:
+        - Key: "Name"
+          Value: "MinecraftEC2Instance"
+      SubnetId: !Ref MinecraftSubnet
+      AvailabilityZone: !Ref AvailabilityZone
+      UserData:
+        Fn::Base64: 
+          !Sub |
+            #!/bin/bash -xe
+            SEED="${MinecraftSeed}"
+            if [ "$SEED" == "random" ]; then
+              SEED=$(od -An -N2 -i /dev/random)
+            fi
+            mkdir -p /minecraft-world
+            until [ -e /dev/nvme1n1 ]; do sleep 1; done
+            FILESYSTEM=$(sudo file -s /dev/nvme1n1)
+            if [[ $FILESYSTEM == "/dev/nvme1n1: data" ]]; then
+              mkfs.ext4 /dev/nvme1n1
+            fi
+            mount /dev/nvme1n1 /minecraft-world
+            echo "/dev/nvme1n1 /minecraft-world ext4 defaults 0 0" | sudo tee -a /etc/fstab
+            yum update -y
+            yum install -y docker
+            service docker start
+            usermod -a -G docker ec2-user
+            docker pull itzg/minecraft-server
+            docker run -d -p 25565:25565 -e EULA=TRUE -e MEMORY="2G" -e SEED="$SEED" --name mc --restart unless-stopped -v /minecraft-world:/data itzg/minecraft-server
+            sleep 60  # Pause for 60 seconds
+            docker start mc
+      IamInstanceProfile: !Ref MinecraftServerInstanceProfile
+      SecurityGroupIds: 
+        - !Ref MinecraftSecurityGroup
+
+  # Elastic IP
+  MinecraftServerEIP:
+    Type: "AWS::EC2::EIP"
+    Properties: 
+      Tags:
+        - Key: "Name"
+          Value: "MinecraftServerEIP"
+  
+  # Associate Elastic IP with EC2 Instance
+  MinecraftEC2InstanceEIPAssociation:
+    Type: "AWS::EC2::EIPAssociation"
+    Properties: 
+      InstanceId: !Ref MinecraftEC2Instance
+      EIP: !Ref MinecraftServerEIP
+
+  # Security Group
+  MinecraftSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      VpcId: !Ref MinecraftVPC
+      GroupDescription: Allow Minecraft traffic
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '25565'
+        ToPort: '25565'
+        CidrIp: !If [IsDefaultIP, !Ref WhitelistIP, !Sub "${WhitelistIP}/32"]
+      - IpProtocol: tcp
+        FromPort: '22'
+        ToPort: '22'
+        CidrIp: !If [IsDefaultIP, !Ref WhitelistIP, !Sub "${WhitelistIP}/32"]
+      Tags:
+        - Key: "Name"
+          Value: "MinecraftSecurityGroup"
+
+  # IAM Role
+  MinecraftServerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: ec2.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+      - PolicyName: AllowEC2Manage
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action: 
+            - ec2:Describe*
+            - ec2:AttachVolume
+            - ec2:DetachVolume
+            Resource: "*"
+      Tags:
+        - Key: "Name"
+          Value: "MinecraftServerRole"
+
+  # IAM Instance Profile
+  MinecraftServerInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+      - Ref: MinecraftServerRole
+
+  # Attach EBS Volume to EC2 Instance
+  MinecraftEBSAttachment:
+    Type: "AWS::EC2::VolumeAttachment"
+    Properties: 
+      Device: "/dev/sdf"
+      InstanceId: !Ref MinecraftEC2Instance
+      VolumeId: !Ref EBSVolumeId
+
+# Outputs
+Outputs:
+  EC2InstancePublicIP:
+    Description: The public IP of the EC2 instance.
+    Value: !GetAtt MinecraftEC2Instance.PublicIp
+  EC2InstanceID:
+    Description: The Instance ID of the EC2 instance.
+    Value: !Ref MinecraftEC2Instance
+  EBSVolumeID:
+    Description: The Volume ID of the attached EBS volume.
+    Value: !Ref EBSVolumeId
