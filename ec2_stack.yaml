@@ -43,6 +43,28 @@ Resources:
       SubnetId: !Ref MinecraftSubnet
       NetworkAclId: !Ref MinecraftNetworkACL
 
+  # Inbound Rules for Network ACL
+  MinecraftNetworkACLInboundRule:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref MinecraftNetworkACL
+      RuleNumber: 100
+      Protocol: '-1'
+      RuleAction: 'allow'
+      Egress: false
+      CidrBlock: 0.0.0.0/0
+
+  # Outbound Rules for Network ACL
+  MinecraftNetworkACLOutboundRule:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref MinecraftNetworkACL
+      RuleNumber: 100
+      Protocol: '-1'
+      RuleAction: 'allow'
+      Egress: true
+      CidrBlock: 0.0.0.0/0
+
   # VPC Resource
   MinecraftVPC:
     Type: AWS::EC2::VPC
