@@ -1,0 +1,24 @@
+Parameters:
+  VolumeSize:
+    Type: Number
+    Default: 10
+    Description: The size of the EBS volume, in GiB.
+  AvailabilityZone:
+    Type: String
+    Default: us-west-2a
+    Description: The Availability Zone to deploy to.
+
+Resources:
+  MinecraftEBSVolume:
+    Type: AWS::EC2::Volume
+    Properties:
+      Size: 10
+      AvailabilityZone: !Ref AvailabilityZone
+      Tags:
+        - Key: "Name"
+          Value: "MinecraftEBS"
+
+Outputs:
+  EBSVolumeId:
+    Description: The ID of the created EBS volume.
+    Value: !Ref MinecraftEBSVolume
