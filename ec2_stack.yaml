@@ -93,7 +93,7 @@ Resources:
     Properties: 
       InstanceType: !Ref InstanceSize
       ImageId: ami-00970f57473724c10
-      KeyName: MyMinecraftKeyPair
+      KeyName: !Ref EC2KeyName
       Tags:
         - Key: "Name"
           Value: "MinecraftEC2Instance"

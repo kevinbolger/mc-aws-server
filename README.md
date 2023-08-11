@@ -35,6 +35,7 @@ AVAILABILITY_ZONE=[placeholder]
 
 AWS_CLI_PROFILE=[placeholder]
 EC2_KEY_PAIR=[placeholder]
+EC2_KEY_NAME=[placeholder]
 
 WHITELIST_IP=[placeholder]
 
@@ -58,9 +59,9 @@ export $(grep -v '^#' .env | xargs)
 #### Create KeyPair
 
 ```bash
-aws ec2 create-key-pair --key-name $EC2_KEY_PAIR --query 'KeyMaterial' --output text > $EC2_KEY_PAIR.pem
+aws ec2 create-key-pair --key-name $EC2_KEY_NAME --query 'KeyMaterial' --output text > $EC2_KEY_NAME.pem
 
-chmod 400 $EC2_KEY_PAIR.pem
+chmod 400 $EC2_KEY_NAME.pem
 ```
 
 ### Create Stacks
@@ -89,7 +90,7 @@ export $(grep -v '^#' .env | xargs)
 ```bash
 aws cloudformation create-stack --stack-name $EC2_STACK_NAME --template-body file://ec2_stack.yaml --parameters \
   ParameterKey=EBSVolumeId,ParameterValue=$VOLUME_ID \
-  ParameterKey=EC2KeyName,ParameterValue=$EC2_KEY_PAIR \
+  ParameterKey=EC2KeyName,ParameterValue=$EC2_KEY_NAME \
   ParameterKey=WhitelistIP,ParameterValue=$WHITELIST_IP \
   ParameterKey=AvailabilityZone,ParameterValue=$AVAILABILITY_ZONE \
   ParameterKey=MinecraftSeed,ParameterValue=$MINECRAFT_SEED \
@@ -110,7 +111,7 @@ export $(grep -v '^#' .env | xargs)
 ### SSH in to server
 
 ```bash
-ssh -i ./$EC2_KEY_PAIR.pem ec2-user@$IP_ADDRESS
+ssh -i ./$EC2_KEY_NAME.pem ec2-user@$IP_ADDRESS
 ```
 
 You can check on the status of your world by running:
