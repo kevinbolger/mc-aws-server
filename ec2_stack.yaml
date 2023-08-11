@@ -27,6 +27,22 @@ Conditions:
 
 Resources:
 
+  # Network ACL
+  MinecraftNetworkACL:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId: !Ref MinecraftVPC
+      Tags:
+        - Key: "Name"
+          Value: "MinecraftNetworkACL"
+
+  # Associate Network ACL with Subnet
+  MinecraftNetworkACLAssociation:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId: !Ref MinecraftSubnet
+      NetworkAclId: !Ref MinecraftNetworkACL
+
   # VPC Resource
   MinecraftVPC:
     Type: AWS::EC2::VPC
@@ -70,6 +86,9 @@ Resources:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref MinecraftVPC
+      Tags:
+        - Key: "Name"
+          Value: "MinecraftRouteTable"
 
   # Route to Internet via IGW
   MinecraftRoute:
