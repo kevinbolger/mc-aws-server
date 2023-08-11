@@ -89,6 +89,7 @@ export $(grep -v '^#' .env | xargs)
 ```bash
 aws cloudformation create-stack --stack-name $EC2_STACK_NAME --template-body file://ec2_stack.yaml --parameters \
   ParameterKey=EBSVolumeId,ParameterValue=$VOLUME_ID \
+  ParameterKey=EC2KeyName,ParameterValue=$EC2_KEY_PAIR \
   ParameterKey=WhitelistIP,ParameterValue=$WHITELIST_IP \
   ParameterKey=AvailabilityZone,ParameterValue=$AVAILABILITY_ZONE \
   ParameterKey=MinecraftSeed,ParameterValue=$MINECRAFT_SEED \
